@@ -1,0 +1,70 @@
+# Nginx反代配置建議
+# 請將此配置應用到您的Nginx設定中
+
+server {
+    listen 80;
+    server_name analytics.htapp.info;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name analytics.htapp.info;
+
+    ssl_certificate    /www/server/panel/vhost/cert/bitpass.htapp.info/fullchain.pem;
+    ssl_certificate_key    /www/server/panel/vhost/cert/bitpass.htapp.info/privkey.pem;
+
+    # 重要：增加緩衝區大小，避免JavaScript被截斷
+    proxy_buffering on;
+    proxy_buffer_size 8k;
+    proxy_buffers 16 8k;
+    proxy_busy_buffers_size 16k;
+
+    # 設置超時時間
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 60s;
+    proxy_read_timeout 60s;
+
+    # 傳遞真實IP和主機信息
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # 支持WebSocket（如果需要）
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    # 處理靜態文件
+    location ~* \.(png|jpg|jpeg|gif|ico|css|js)$ {
+        proxy_pass http://127.0.0.1:5566;
+        proxy_cache_valid 200 1h;
+        expires 1h;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # 主要代理配置
+    location / {
+        proxy_pass http://127.0.0.1:5566;
+        
+        # 確保響應頭正確傳遞
+        proxy_hide_header X-Powered-By;
+        proxy_set_header Accept-Encoding "";
+        
+        # 處理重定向
+        proxy_redirect off;
+        
+        # 增加最大請求大小
+        client_max_body_size 10M;
+        
+        # 重要：禁用gzip壓縮，避免JavaScript被破壞
+        gzip off;
+    }
+
+    # 健康檢查端點
+    location /health {
+        proxy_pass http://127.0.0.1:5566/health;
+        access_log off;
+    }
+}

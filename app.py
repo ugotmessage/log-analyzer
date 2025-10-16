@@ -305,15 +305,41 @@ HTML_TEMPLATE = """
             }
         }
         
-        // 更新統計顯示
+        // 更新統計顯示 - 強健版本
         function updateStatsDisplay(stats) {
             console.log('開始更新統計顯示...', stats);
             
+            // 等待DOM完全準備好
+            if (document.readyState !== 'complete') {
+                console.log('等待DOM完全加載...');
+                setTimeout(() => updateStatsDisplay(stats), 100);
+                return;
+            }
+            
+            // 檢查所有必需元素
+            const elements = {
+                basicStats: document.getElementById('basic-stats'),
+                timeRange: document.getElementById('time-range'),
+                httpMethods: document.getElementById('http-methods'),
+                statusCodes: document.getElementById('status-codes')
+            };
+            
+            // 檢查是否有任何元素缺失
+            const missingElements = Object.entries(elements)
+                .filter(([name, element]) => !element)
+                .map(([name]) => name);
+            
+            if (missingElements.length > 0) {
+                console.error('缺少必需的元素:', missingElements);
+                console.log('頁面HTML結構:', document.body.innerHTML.substring(0, 500));
+                alert('頁面元素未完全加載，請重新整理頁面後再試');
+                return;
+            }
+            
             try {
                 // 更新基本統計
-                const basicStatsElement = document.getElementById('basic-stats');
-                if (basicStatsElement) {
-                    basicStatsElement.innerHTML = `
+                if (elements.basicStats) {
+                    elements.basicStats.innerHTML = `
                         <h3>📊 基本統計</h3>
                         <p><strong>總請求數:</strong> ${stats.total_requests || 0}</p>
                         <p><strong>唯一IP數:</strong> ${stats.unique_ips || 0}</p>
@@ -321,14 +347,11 @@ HTML_TEMPLATE = """
                         <p><strong>平均回應大小:</strong> ${(stats.avg_response_size || 0).toFixed(0)} bytes</p>
                     `;
                     console.log('基本統計更新成功');
-                } else {
-                    console.warn('找不到 #basic-stats 元素');
                 }
                 
                 // 更新時間範圍
-                const timeElement = document.getElementById('time-range');
-                if (timeElement) {
-                    timeElement.innerHTML = stats.time_range ? `
+                if (elements.timeRange) {
+                    elements.timeRange.innerHTML = stats.time_range ? `
                         <h3>⏰ 時間範圍</h3>
                         <p><strong>開始時間:</strong> ${stats.time_range.start}</p>
                         <p><strong>結束時間:</strong> ${stats.time_range.end}</p>
@@ -337,13 +360,10 @@ HTML_TEMPLATE = """
                         <p>暫無時間資料</p>
                     `;
                     console.log('時間範圍更新成功');
-                } else {
-                    console.warn('找不到 #time-range 元素');
                 }
                 
                 // 更新HTTP方法
-                const methodsElement = document.getElementById('http-methods');
-                if (methodsElement) {
+                if (elements.httpMethods) {
                     let methodsHtml = '<h3>🌐 HTTP方法</h3>';
                     if (stats.methods && Object.keys(stats.methods).length > 0) {
                         for (let [method, count] of Object.entries(stats.methods)) {
@@ -352,15 +372,12 @@ HTML_TEMPLATE = """
                     } else {
                         methodsHtml += '<p>暫無方法資料</p>';
                     }
-                    methodsElement.innerHTML = methodsHtml;
+                    elements.httpMethods.innerHTML = methodsHtml;
                     console.log('HTTP方法更新成功');
-                } else {
-                    console.warn('找不到 #http-methods 元素');
                 }
                 
                 // 更新狀態碼
-                const statusElement = document.getElementById('status-codes');
-                if (statusElement) {
+                if (elements.statusCodes) {
                     let statusHtml = '<h3>📈 狀態碼</h3>';
                     if (stats.status_codes && Object.keys(stats.status_codes).length > 0) {
                         for (let [code, count] of Object.entries(stats.status_codes)) {
@@ -369,15 +386,14 @@ HTML_TEMPLATE = """
                     } else {
                         statusHtml += '<p>暫無狀態碼資料</p>';
                     }
-                    statusElement.innerHTML = statusHtml;
+                    elements.statusCodes.innerHTML = statusHtml;
                     console.log('狀態碼更新成功');
-                } else {
-                    console.warn('找不到 #status-codes 元素');
                 }
                 
                 console.log('統計顯示更新完成');
             } catch (error) {
                 console.error('更新統計顯示時發生錯誤:', error);
+                console.error('錯誤堆疊:', error.stack);
             }
         }
         
