@@ -64,7 +64,7 @@ HTML_TEMPLATE = """
             <h1>🔍 LOG分析儀</h1>
             <p>輕量級Apache/Nginx LOG分析工具</p>
             <div class="version-info">
-                <span>版本: 2025-10-16 19:15</span>
+                <span>版本: {{ current_time }}</span>
             </div>
         </div>
         
@@ -453,7 +453,10 @@ def index():
         else:
             stats = {}
         
-        return render_template_string(HTML_TEMPLATE, stats=stats)
+        # 生成當前時間作為版本資訊
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
+        
+        return render_template_string(HTML_TEMPLATE, stats=stats, current_time=current_time)
     except Exception as e:
         return f"錯誤: {str(e)}", 500
 
