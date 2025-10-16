@@ -267,14 +267,26 @@ HTML_TEMPLATE = """
             }
         }
         
-        // 安全更新DOM元素
-        function safeUpdateElement(selector, content) {
+        // 安全更新DOM元素（帶重試機制）
+        function safeUpdateElement(selector, content, retries = 3) {
             const element = document.querySelector(selector);
             if (element) {
-                element.innerHTML = content;
-                return true;
+                try {
+                    element.innerHTML = content;
+                    console.log(`成功更新元素: ${selector}`);
+                    return true;
+                } catch (error) {
+                    console.error(`更新元素失敗: ${selector}`, error);
+                    return false;
+                }
             } else {
-                console.warn(`找不到元素: ${selector}`);
+                console.warn(`找不到元素: ${selector}，剩餘重試次數: ${retries}`);
+                if (retries > 0) {
+                    // 等待100ms後重試
+                    setTimeout(() => {
+                        safeUpdateElement(selector, content, retries - 1);
+                    }, 100);
+                }
                 return false;
             }
         }
@@ -282,6 +294,23 @@ HTML_TEMPLATE = """
         // 更新統計顯示
         function updateStatsDisplay(stats) {
             console.log('開始更新統計顯示...', stats);
+            
+            // 確保DOM已加載
+            if (document.readyState !== 'complete') {
+                console.log('等待DOM完全加載...');
+                setTimeout(() => updateStatsDisplay(stats), 100);
+                return;
+            }
+            
+            // 檢查所有必需的元素是否存在
+            const requiredElements = ['#basic-stats', '#time-range', '#http-methods', '#status-codes'];
+            const missingElements = requiredElements.filter(selector => !document.querySelector(selector));
+            
+            if (missingElements.length > 0) {
+                console.warn('缺少必需的元素:', missingElements);
+                setTimeout(() => updateStatsDisplay(stats), 200);
+                return;
+            }
             
             // 更新基本統計
             const basicStatsHtml = `
