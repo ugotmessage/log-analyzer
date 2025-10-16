@@ -267,26 +267,20 @@ HTML_TEMPLATE = """
             }
         }
         
-        // 安全更新DOM元素（帶重試機制）
-        function safeUpdateElement(selector, content, retries = 3) {
-            const element = document.querySelector(selector);
-            if (element) {
-                try {
+        // 安全更新DOM元素
+        function safeUpdateElement(selector, content) {
+            try {
+                const element = document.querySelector(selector);
+                if (element) {
                     element.innerHTML = content;
                     console.log(`成功更新元素: ${selector}`);
                     return true;
-                } catch (error) {
-                    console.error(`更新元素失敗: ${selector}`, error);
+                } else {
+                    console.warn(`找不到元素: ${selector}`);
                     return false;
                 }
-            } else {
-                console.warn(`找不到元素: ${selector}，剩餘重試次數: ${retries}`);
-                if (retries > 0) {
-                    // 等待100ms後重試
-                    setTimeout(() => {
-                        safeUpdateElement(selector, content, retries - 1);
-                    }, 100);
-                }
+            } catch (error) {
+                console.error(`更新元素失敗: ${selector}`, error);
                 return false;
             }
         }
@@ -295,67 +289,76 @@ HTML_TEMPLATE = """
         function updateStatsDisplay(stats) {
             console.log('開始更新統計顯示...', stats);
             
-            // 確保DOM已加載
-            if (document.readyState !== 'complete') {
-                console.log('等待DOM完全加載...');
-                setTimeout(() => updateStatsDisplay(stats), 100);
-                return;
-            }
-            
-            // 檢查所有必需的元素是否存在
-            const requiredElements = ['#basic-stats', '#time-range', '#http-methods', '#status-codes'];
-            const missingElements = requiredElements.filter(selector => !document.querySelector(selector));
-            
-            if (missingElements.length > 0) {
-                console.warn('缺少必需的元素:', missingElements);
-                setTimeout(() => updateStatsDisplay(stats), 200);
-                return;
-            }
-            
-            // 更新基本統計
-            const basicStatsHtml = `
-                <h3>📊 基本統計</h3>
-                <p><strong>總請求數:</strong> ${stats.total_requests || 0}</p>
-                <p><strong>唯一IP數:</strong> ${stats.unique_ips || 0}</p>
-                <p><strong>總流量:</strong> ${((stats.total_bytes || 0) / 1024 / 1024).toFixed(2)} MB</p>
-                <p><strong>平均回應大小:</strong> ${(stats.avg_response_size || 0).toFixed(0)} bytes</p>
-            `;
-            safeUpdateElement('#basic-stats', basicStatsHtml);
-            
-            // 更新時間範圍
-            const timeHtml = stats.time_range ? `
-                <h3>⏰ 時間範圍</h3>
-                <p><strong>開始時間:</strong> ${stats.time_range.start}</p>
-                <p><strong>結束時間:</strong> ${stats.time_range.end}</p>
-            ` : `
-                <h3>⏰ 時間範圍</h3>
-                <p>暫無時間資料</p>
-            `;
-            safeUpdateElement('#time-range', timeHtml);
-            
-            // 更新HTTP方法
-            let methodsHtml = '<h3>🌐 HTTP方法</h3>';
-            if (stats.methods && Object.keys(stats.methods).length > 0) {
-                for (let [method, count] of Object.entries(stats.methods)) {
-                    methodsHtml += `<p><strong>${method}:</strong> ${count}</p>`;
+            try {
+                // 更新基本統計
+                const basicStatsElement = document.getElementById('basic-stats');
+                if (basicStatsElement) {
+                    basicStatsElement.innerHTML = `
+                        <h3>📊 基本統計</h3>
+                        <p><strong>總請求數:</strong> ${stats.total_requests || 0}</p>
+                        <p><strong>唯一IP數:</strong> ${stats.unique_ips || 0}</p>
+                        <p><strong>總流量:</strong> ${((stats.total_bytes || 0) / 1024 / 1024).toFixed(2)} MB</p>
+                        <p><strong>平均回應大小:</strong> ${(stats.avg_response_size || 0).toFixed(0)} bytes</p>
+                    `;
+                    console.log('基本統計更新成功');
+                } else {
+                    console.warn('找不到 #basic-stats 元素');
                 }
-            } else {
-                methodsHtml += '<p>暫無方法資料</p>';
-            }
-            safeUpdateElement('#http-methods', methodsHtml);
-            
-            // 更新狀態碼
-            let statusHtml = '<h3>📈 狀態碼</h3>';
-            if (stats.status_codes && Object.keys(stats.status_codes).length > 0) {
-                for (let [code, count] of Object.entries(stats.status_codes)) {
-                    statusHtml += `<p><strong>${code}:</strong> ${count}</p>`;
+                
+                // 更新時間範圍
+                const timeElement = document.getElementById('time-range');
+                if (timeElement) {
+                    timeElement.innerHTML = stats.time_range ? `
+                        <h3>⏰ 時間範圍</h3>
+                        <p><strong>開始時間:</strong> ${stats.time_range.start}</p>
+                        <p><strong>結束時間:</strong> ${stats.time_range.end}</p>
+                    ` : `
+                        <h3>⏰ 時間範圍</h3>
+                        <p>暫無時間資料</p>
+                    `;
+                    console.log('時間範圍更新成功');
+                } else {
+                    console.warn('找不到 #time-range 元素');
                 }
-            } else {
-                statusHtml += '<p>暫無狀態碼資料</p>';
+                
+                // 更新HTTP方法
+                const methodsElement = document.getElementById('http-methods');
+                if (methodsElement) {
+                    let methodsHtml = '<h3>🌐 HTTP方法</h3>';
+                    if (stats.methods && Object.keys(stats.methods).length > 0) {
+                        for (let [method, count] of Object.entries(stats.methods)) {
+                            methodsHtml += `<p><strong>${method}:</strong> ${count}</p>`;
+                        }
+                    } else {
+                        methodsHtml += '<p>暫無方法資料</p>';
+                    }
+                    methodsElement.innerHTML = methodsHtml;
+                    console.log('HTTP方法更新成功');
+                } else {
+                    console.warn('找不到 #http-methods 元素');
+                }
+                
+                // 更新狀態碼
+                const statusElement = document.getElementById('status-codes');
+                if (statusElement) {
+                    let statusHtml = '<h3>📈 狀態碼</h3>';
+                    if (stats.status_codes && Object.keys(stats.status_codes).length > 0) {
+                        for (let [code, count] of Object.entries(stats.status_codes)) {
+                            statusHtml += `<p><strong>${code}:</strong> ${count}</p>`;
+                        }
+                    } else {
+                        statusHtml += '<p>暫無狀態碼資料</p>';
+                    }
+                    statusElement.innerHTML = statusHtml;
+                    console.log('狀態碼更新成功');
+                } else {
+                    console.warn('找不到 #status-codes 元素');
+                }
+                
+                console.log('統計顯示更新完成');
+            } catch (error) {
+                console.error('更新統計顯示時發生錯誤:', error);
             }
-            safeUpdateElement('#status-codes', statusHtml);
-            
-            console.log('統計顯示更新完成');
         }
         
         // 更新圖表
