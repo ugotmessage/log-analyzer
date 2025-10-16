@@ -196,15 +196,24 @@ HTML_TEMPLATE = """
             }
             
             try {
+                console.log('正在套用過濾條件...');
                 // 更新統計資料
                 const statsResponse = await fetch(`/api/stats?${params}`);
+                
+                if (!statsResponse.ok) {
+                    throw new Error(`HTTP ${statsResponse.status}: ${statsResponse.statusText}`);
+                }
+                
                 const stats = await statsResponse.json();
+                console.log('收到統計資料:', stats);
                 
                 // 更新頁面顯示
                 updateStatsDisplay(stats);
                 
                 // 更新圖表
                 updateCharts();
+                
+                console.log('過濾條件套用成功');
                 
             } catch (error) {
                 console.error('套用過濾失敗:', error);
@@ -258,62 +267,66 @@ HTML_TEMPLATE = """
             }
         }
         
+        // 安全更新DOM元素
+        function safeUpdateElement(selector, content) {
+            const element = document.querySelector(selector);
+            if (element) {
+                element.innerHTML = content;
+                return true;
+            } else {
+                console.warn(`找不到元素: ${selector}`);
+                return false;
+            }
+        }
+        
         // 更新統計顯示
         function updateStatsDisplay(stats) {
+            console.log('開始更新統計顯示...');
+            
             // 更新基本統計
-            document.querySelector('.stat-card:nth-child(1) p:nth-child(1)').innerHTML = 
-                `<strong>總請求數:</strong> ${stats.total_requests || 0}`;
-            document.querySelector('.stat-card:nth-child(1) p:nth-child(2)').innerHTML = 
-                `<strong>唯一IP數:</strong> ${stats.unique_ips || 0}`;
-            document.querySelector('.stat-card:nth-child(1) p:nth-child(3)').innerHTML = 
-                `<strong>總流量:</strong> ${((stats.total_bytes || 0) / 1024 / 1024).toFixed(2)} MB`;
-            document.querySelector('.stat-card:nth-child(1) p:nth-child(4)').innerHTML = 
-                `<strong>平均回應大小:</strong> ${(stats.avg_response_size || 0).toFixed(0)} bytes`;
+            const basicStatsHtml = `
+                <h3>📊 基本統計</h3>
+                <p><strong>總請求數:</strong> ${stats.total_requests || 0}</p>
+                <p><strong>唯一IP數:</strong> ${stats.unique_ips || 0}</p>
+                <p><strong>總流量:</strong> ${((stats.total_bytes || 0) / 1024 / 1024).toFixed(2)} MB</p>
+                <p><strong>平均回應大小:</strong> ${(stats.avg_response_size || 0).toFixed(0)} bytes</p>
+            `;
+            safeUpdateElement('.stat-card:first-child', basicStatsHtml);
             
             // 更新時間範圍
-            const timeCard = document.querySelector('.stat-card:nth-child(2)');
-            if (stats.time_range) {
-                timeCard.innerHTML = `
-                    <h3>⏰ 時間範圍</h3>
-                    <p><strong>開始時間:</strong> ${stats.time_range.start}</p>
-                    <p><strong>結束時間:</strong> ${stats.time_range.end}</p>
-                `;
-            } else {
-                timeCard.innerHTML = `
-                    <h3>⏰ 時間範圍</h3>
-                    <p>暫無時間資料</p>
-                `;
-            }
+            const timeHtml = stats.time_range ? `
+                <h3>⏰ 時間範圍</h3>
+                <p><strong>開始時間:</strong> ${stats.time_range.start}</p>
+                <p><strong>結束時間:</strong> ${stats.time_range.end}</p>
+            ` : `
+                <h3>⏰ 時間範圍</h3>
+                <p>暫無時間資料</p>
+            `;
+            safeUpdateElement('.stat-card:nth-child(2)', timeHtml);
             
             // 更新HTTP方法
-            const methodCard = document.querySelector('.stat-card:nth-child(3)');
+            let methodsHtml = '<h3>🌐 HTTP方法</h3>';
             if (stats.methods && Object.keys(stats.methods).length > 0) {
-                let methodsHtml = '<h3>🌐 HTTP方法</h3>';
                 for (let [method, count] of Object.entries(stats.methods)) {
                     methodsHtml += `<p><strong>${method}:</strong> ${count}</p>`;
                 }
-                methodCard.innerHTML = methodsHtml;
             } else {
-                methodCard.innerHTML = `
-                    <h3>🌐 HTTP方法</h3>
-                    <p>暫無方法資料</p>
-                `;
+                methodsHtml += '<p>暫無方法資料</p>';
             }
+            safeUpdateElement('.stat-card:nth-child(3)', methodsHtml);
             
             // 更新狀態碼
-            const statusCard = document.querySelector('.stat-card:nth-child(4)');
+            let statusHtml = '<h3>📈 狀態碼</h3>';
             if (stats.status_codes && Object.keys(stats.status_codes).length > 0) {
-                let statusHtml = '<h3>📈 狀態碼</h3>';
                 for (let [code, count] of Object.entries(stats.status_codes)) {
                     statusHtml += `<p><strong>${code}:</strong> ${count}</p>`;
                 }
-                statusCard.innerHTML = statusHtml;
             } else {
-                statusCard.innerHTML = `
-                    <h3>📈 狀態碼</h3>
-                    <p>暫無狀態碼資料</p>
-                `;
+                statusHtml += '<p>暫無狀態碼資料</p>';
             }
+            safeUpdateElement('.stat-card:nth-child(4)', statusHtml);
+            
+            console.log('統計顯示更新完成');
         }
         
         // 更新圖表
