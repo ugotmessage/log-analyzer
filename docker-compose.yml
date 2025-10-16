@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  log-analyzer:
+    build: .
+    ports:
+      - "5566:5000"
+    volumes:
+      # 掛載log資料夾到容器內
+      - ./logs:/app/logs:ro
+      # 掛載輸出結果資料夾
+      - ./output:/app/output
+    environment:
+      - FLASK_ENV=production
+      - LOG_DIR=/app/logs
+      - OUTPUT_DIR=/app/output
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5566/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
