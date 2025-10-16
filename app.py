@@ -81,7 +81,7 @@ HTML_TEMPLATE = """
         </div>
         
         <div class="stats-grid">
-            <div class="stat-card">
+            <div class="stat-card" id="basic-stats">
                 <h3>📊 基本統計</h3>
                 <p><strong>總請求數:</strong> {{ stats.get('total_requests', 0) }}</p>
                 <p><strong>唯一IP數:</strong> {{ stats.get('unique_ips', 0) }}</p>
@@ -89,7 +89,7 @@ HTML_TEMPLATE = """
                 <p><strong>平均回應大小:</strong> {{ "%.0f"|format(stats.get('avg_response_size', 0)) }} bytes</p>
             </div>
             
-            <div class="stat-card">
+            <div class="stat-card" id="time-range">
                 <h3>⏰ 時間範圍</h3>
                 {% if stats.get('time_range') %}
                 <p><strong>開始時間:</strong> {{ stats.time_range.start }}</p>
@@ -99,7 +99,7 @@ HTML_TEMPLATE = """
                 {% endif %}
             </div>
             
-            <div class="stat-card">
+            <div class="stat-card" id="http-methods">
                 <h3>🌐 HTTP方法</h3>
                 {% if stats.get('methods') %}
                 {% for method, count in stats.methods.items() %}
@@ -110,7 +110,7 @@ HTML_TEMPLATE = """
                 {% endif %}
             </div>
             
-            <div class="stat-card">
+            <div class="stat-card" id="status-codes">
                 <h3>📈 狀態碼</h3>
                 {% if stats.get('status_codes') %}
                 {% for code, count in stats.status_codes.items() %}
@@ -281,7 +281,7 @@ HTML_TEMPLATE = """
         
         // 更新統計顯示
         function updateStatsDisplay(stats) {
-            console.log('開始更新統計顯示...');
+            console.log('開始更新統計顯示...', stats);
             
             // 更新基本統計
             const basicStatsHtml = `
@@ -291,7 +291,7 @@ HTML_TEMPLATE = """
                 <p><strong>總流量:</strong> ${((stats.total_bytes || 0) / 1024 / 1024).toFixed(2)} MB</p>
                 <p><strong>平均回應大小:</strong> ${(stats.avg_response_size || 0).toFixed(0)} bytes</p>
             `;
-            safeUpdateElement('.stat-card:first-child', basicStatsHtml);
+            safeUpdateElement('#basic-stats', basicStatsHtml);
             
             // 更新時間範圍
             const timeHtml = stats.time_range ? `
@@ -302,7 +302,7 @@ HTML_TEMPLATE = """
                 <h3>⏰ 時間範圍</h3>
                 <p>暫無時間資料</p>
             `;
-            safeUpdateElement('.stat-card:nth-child(2)', timeHtml);
+            safeUpdateElement('#time-range', timeHtml);
             
             // 更新HTTP方法
             let methodsHtml = '<h3>🌐 HTTP方法</h3>';
@@ -313,7 +313,7 @@ HTML_TEMPLATE = """
             } else {
                 methodsHtml += '<p>暫無方法資料</p>';
             }
-            safeUpdateElement('.stat-card:nth-child(3)', methodsHtml);
+            safeUpdateElement('#http-methods', methodsHtml);
             
             // 更新狀態碼
             let statusHtml = '<h3>📈 狀態碼</h3>';
@@ -324,7 +324,7 @@ HTML_TEMPLATE = """
             } else {
                 statusHtml += '<p>暫無狀態碼資料</p>';
             }
-            safeUpdateElement('.stat-card:nth-child(4)', statusHtml);
+            safeUpdateElement('#status-codes', statusHtml);
             
             console.log('統計顯示更新完成');
         }
