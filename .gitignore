@@ -57,3 +57,4 @@ output/*.json
 *.temp
 
 docker-compose.yml
+nginx.conf

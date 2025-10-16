@@ -229,7 +229,25 @@ HTML_TEMPLATE = """
         
         // 執行完整分析
         async function runAnalysis() {
+            console.log('開始執行分析...');
+            
+            // 檢查必需的元素是否存在
+            const requiredElements = ['basic-stats', 'time-range', 'http-methods', 'status-codes'];
+            const missingElements = requiredElements.filter(id => !document.getElementById(id));
+            
+            if (missingElements.length > 0) {
+                console.error('缺少必需的元素:', missingElements);
+                alert('頁面元素未完全加載，請稍後再試');
+                return;
+            }
+            
             const form = document.getElementById('filterForm');
+            if (!form) {
+                console.error('找不到過濾表單');
+                alert('找不到過濾表單');
+                return;
+            }
+            
             const formData = new FormData(form);
             const data = {};
             
@@ -240,6 +258,7 @@ HTML_TEMPLATE = """
             }
             
             try {
+                console.log('發送分析請求:', data);
                 const response = await fetch('/api/analyze', {
                     method: 'POST',
                     headers: {
@@ -249,6 +268,7 @@ HTML_TEMPLATE = """
                 });
                 
                 const result = await response.json();
+                console.log('收到分析結果:', result);
                 
                 if (result.success) {
                     // 更新統計資料
@@ -371,7 +391,13 @@ HTML_TEMPLATE = """
         
         // 頁面載入時初始化
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM已加載，開始初始化...');
             loadLogFiles();
+        });
+        
+        // 確保頁面完全加載後再執行
+        window.addEventListener('load', function() {
+            console.log('頁面完全加載完成');
         });
     </script>
 </body>
