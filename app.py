@@ -39,6 +39,23 @@ HTML_TEMPLATE = """
         .filter-actions button:nth-child(2) { background: #6c757d; color: white; }
         .filter-actions button:nth-child(3) { background: #28a745; color: white; }
         .filter-actions button:hover { opacity: 0.8; }
+        
+        /* 版本信息樣式 */
+        .version-info {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.1);
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            color: #666;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            position: relative;
+        }
     </style>
 </head>
 <body>
@@ -46,6 +63,9 @@ HTML_TEMPLATE = """
         <div class="header">
             <h1>🔍 LOG分析儀</h1>
             <p>輕量級Apache/Nginx LOG分析工具</p>
+            <div class="version-info">
+                <span>版本: 2025-10-16 19:15</span>
+            </div>
         </div>
         
         <!-- 過濾表單 -->
