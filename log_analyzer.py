@@ -2,10 +2,11 @@ import re
 import os
 from datetime import datetime, timedelta
 from collections import Counter, defaultdict
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 from typing import List, Dict, Any
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
 import json
 
 
@@ -197,61 +198,187 @@ class LogAnalyzer:
         
         return anomalies
     
-    def generate_charts(self, logs: List[Dict[str, Any]]) -> List[str]:
-        """生成圖表"""
+    def generate_charts(self, logs: List[Dict[str, Any]], time_interval: str = 'daily') -> List[str]:
+        """生成圖表（使用plotly）"""
         if not logs:
             return []
-            
+
         df = pd.DataFrame(logs)
         df['datetime'] = pd.to_datetime(df['timestamp'], format='%d/%b/%Y:%H:%M:%S %z')
-        
+
         chart_files = []
-        
-        # 設定中文字體
-        plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
-        plt.rcParams['axes.unicode_minus'] = False
-        
-        # 1. 狀態碼分布
-        plt.figure(figsize=(10, 6))
-        df['status_code'].value_counts().plot(kind='bar')
-        plt.title('HTTP Status Code Distribution')
-        plt.xlabel('Status Code')
-        plt.ylabel('Count')
-        plt.tight_layout()
-        status_chart = os.path.join(self.output_dir, 'status_codes.png')
-        plt.savefig(status_chart)
-        plt.close()
-        chart_files.append(status_chart)
-        
-        # 2. 每小時流量
-        plt.figure(figsize=(12, 6))
-        df['hour'] = df['datetime'].dt.hour
-        hourly_counts = df.groupby('hour').size()
-        hourly_counts.plot(kind='line', marker='o')
-        plt.title('Hourly Traffic Distribution')
-        plt.xlabel('Hour')
-        plt.ylabel('Requests')
-        plt.grid(True)
-        plt.tight_layout()
-        hourly_chart = os.path.join(self.output_dir, 'hourly_traffic.png')
-        plt.savefig(hourly_chart)
-        plt.close()
-        chart_files.append(hourly_chart)
-        
-        # 3. Top IPs
-        plt.figure(figsize=(12, 6))
-        top_ips = df['ip'].value_counts().head(10)
-        top_ips.plot(kind='bar')
-        plt.title('Top 10 IP Addresses')
-        plt.xlabel('IP Address')
-        plt.ylabel('Requests')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
+
+        # 1. 流量趨勢圖（支援動態時間級距）
+        if time_interval == 'hourly':
+            df['time_group'] = df['datetime'].dt.floor('H')
+            group_col = 'time_group'
+            title = '每小時流量趨勢'
+        elif time_interval == 'daily':
+            df['time_group'] = df['datetime'].dt.date
+            group_col = 'time_group'
+            title = '每日流量趨勢'
+        elif time_interval == 'weekly':
+            df['time_group'] = df['datetime'].dt.to_period('W').dt.start_time
+            group_col = 'time_group'
+            title = '每週流量趨勢'
+        elif time_interval == 'monthly':
+            df['time_group'] = df['datetime'].dt.to_period('M').dt.start_time
+            group_col = 'time_group'
+            title = '每月流量趨勢'
+        else:
+            df['time_group'] = df['datetime'].dt.date
+            group_col = 'time_group'
+            title = '每日流量趨勢'
+
+        # 計算流量統計
+        traffic_stats = df.groupby(group_col).agg({
+            'ip': 'count',
+            'response_size': 'sum'
+        }).rename(columns={'ip': 'requests', 'response_size': 'bytes'}).reset_index()
+
+        # 創建雙軸圖表
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+        # 添加請求數線圖
+        fig.add_trace(
+            go.Scatter(
+                x=traffic_stats[group_col],
+                y=traffic_stats['requests'],
+                name='請求數',
+                line=dict(color='#667eea', width=3),
+                mode='lines+markers',
+                marker=dict(size=6)
+            ),
+            secondary_y=False
+        )
+
+        # 添加流量線圖
+        fig.add_trace(
+            go.Scatter(
+                x=traffic_stats[group_col],
+                y=traffic_stats['bytes'] / 1024 / 1024,
+                name='流量 (MB)',
+                line=dict(color='#f39c12', width=3),
+                mode='lines+markers',
+                marker=dict(size=6)
+            ),
+            secondary_y=True
+        )
+
+        # 更新佈局
+        fig.update_layout(
+            title=dict(
+                text=title,
+                font=dict(size=16, family='Arial, sans-serif'),
+                x=0.5
+            ),
+            xaxis=dict(
+                title=dict(text='時間', font=dict(size=12, family='Arial, sans-serif')),
+                tickfont=dict(size=10, family='Arial, sans-serif'),
+                tickangle=45
+            ),
+            yaxis=dict(
+                title=dict(text='請求數', font=dict(size=12, family='Arial, sans-serif')),
+                tickfont=dict(size=10, family='Arial, sans-serif')
+            ),
+            yaxis2=dict(
+                title=dict(text='流量 (MB)', font=dict(size=12, family='Arial, sans-serif')),
+                tickfont=dict(size=10, family='Arial, sans-serif')
+            ),
+            legend=dict(
+                font=dict(size=12, family='Arial, sans-serif')
+            ),
+            height=400,
+            width=600,
+            margin=dict(l=60, r=60, t=80, b=80)
+        )
+
+        # 儲存圖表
+        traffic_chart = os.path.join(self.output_dir, 'traffic_trend.png')
+        fig.write_image(traffic_chart, format='png', engine='kaleido', scale=2)
+        chart_files.append(traffic_chart)
+
+        # 2. Top IPs 分布圖
+        top_ips = df['ip'].value_counts().head(10).reset_index()
+        top_ips.columns = ['ip', 'count']
+
+        fig_ip = go.Figure()
+        fig_ip.add_trace(
+            go.Bar(
+                y=top_ips['ip'],
+                x=top_ips['count'],
+                orientation='h',
+                marker=dict(color='#667eea'),
+                text=top_ips['count'],
+                textposition='outside',
+                textfont=dict(size=10, family='Arial, sans-serif')
+            )
+        )
+
+        fig_ip.update_layout(
+            title=dict(
+                text='熱門IP分布 (Top 10)',
+                font=dict(size=16, family='Arial, sans-serif'),
+                x=0.5
+            ),
+            xaxis=dict(
+                title=dict(text='請求數', font=dict(size=12, family='Arial, sans-serif')),
+                tickfont=dict(size=10, family='Arial, sans-serif')
+            ),
+            yaxis=dict(
+                tickfont=dict(size=10, family='Arial, sans-serif')
+            ),
+            height=400,
+            width=500,
+            margin=dict(l=100, r=60, t=80, b=60)
+        )
+
         ips_chart = os.path.join(self.output_dir, 'top_ips.png')
-        plt.savefig(ips_chart)
-        plt.close()
+        fig_ip.write_image(ips_chart, format='png', engine='kaleido', scale=2)
         chart_files.append(ips_chart)
-        
+
+        # 3. Top URLs 分布圖
+        top_urls = df['url'].value_counts().head(12).reset_index()
+        top_urls.columns = ['url', 'count']
+
+        # 截斷過長的URL
+        top_urls['display_url'] = top_urls['url'].apply(lambda x: x[:40] + '...' if len(x) > 40 else x)
+
+        fig_url = go.Figure()
+        fig_url.add_trace(
+            go.Bar(
+                y=top_urls['display_url'],
+                x=top_urls['count'],
+                orientation='h',
+                marker=dict(color='#27ae60'),
+                text=top_urls['count'],
+                textposition='outside',
+                textfont=dict(size=10, family='Arial, sans-serif')
+            )
+        )
+
+        fig_url.update_layout(
+            title=dict(
+                text='熱門URL分布 (Top 12)',
+                font=dict(size=16, family='Arial, sans-serif'),
+                x=0.5
+            ),
+            xaxis=dict(
+                title=dict(text='請求數', font=dict(size=12, family='Arial, sans-serif')),
+                tickfont=dict(size=10, family='Arial, sans-serif')
+            ),
+            yaxis=dict(
+                tickfont=dict(size=9, family='Arial, sans-serif')
+            ),
+            height=500,
+            width=800,
+            margin=dict(l=200, r=60, t=80, b=60)
+        )
+
+        urls_chart = os.path.join(self.output_dir, 'top_urls.png')
+        fig_url.write_image(urls_chart, format='png', engine='kaleido', scale=2)
+        chart_files.append(urls_chart)
+
         return chart_files
     
     def export_results(self, logs: List[Dict[str, Any]], filename: str = "analysis_results.json"):
@@ -273,7 +400,7 @@ class LogAnalyzer:
         
         return output_file
     
-    def run_full_analysis(self, log_filename: str = None, start_time: str = None, end_time: str = None, domain: str = None):
+    def run_full_analysis(self, log_filename: str = None, start_time: str = None, end_time: str = None, domain: str = None, time_interval: str = 'daily'):
         """執行完整分析，支援時間範圍和網域過濾"""
         print("開始載入LOG檔案...")
         logs = self.load_logs(log_filename, start_time, end_time, domain)
@@ -305,8 +432,8 @@ class LogAnalyzer:
         print("檢測異常行為...")
         anomalies = self.detect_anomalies(logs)
         
-        print("生成圖表...")
-        charts = self.generate_charts(logs)
+        print(f"生成圖表 (時間級距: {time_interval})...")
+        charts = self.generate_charts(logs, time_interval)
         
         print("匯出結果...")
         results_file = self.export_results(logs)
@@ -323,6 +450,7 @@ class LogAnalyzer:
             'filters': {
                 'start_time': start_time,
                 'end_time': end_time,
-                'domain': domain
+                'domain': domain,
+                'time_interval': time_interval
             }
         }
