@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LOG分析儀</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=3">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🔍 LOG分析儀</h1>
+            <p>輕量級Apache/Nginx LOG分析工具</p>
+            <div class="version-info">v{{ current_time }}</div>
+        </div>
+        
+        <!-- Filter Section -->
+        <div class="filter-section">
+            <h3>🔍 過濾條件</h3>
+            <form id="filterForm">
+                <div class="filter-grid">
+                    <div class="filter-group">
+                        <label for="filename">LOG檔案</label>
+                        <select id="filename" name="filename">
+                            <option value="">所有檔案</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="start_time">開始時間</label>
+                        <input type="datetime-local" id="start_time" name="start_time">
+                    </div>
+                    <div class="filter-group">
+                        <label for="end_time">結束時間</label>
+                        <input type="datetime-local" id="end_time" name="end_time">
+                    </div>
+                    <div class="filter-group">
+                        <label for="time_interval">時間間隔</label>
+                        <select id="time_interval" name="time_interval">
+                            <option value="hourly">每小時</option>
+                            <option value="daily" selected>每日</option>
+                            <option value="weekly">每週</option>
+                            <option value="monthly">每月</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="domain">網域過濾</label>
+                        <input type="text" id="domain" name="domain" placeholder="例如: example.com">
+                    </div>
+                </div>
+                <div class="filter-actions">
+                    <button type="button" class="btn btn-primary" onclick="applyFilters()">
+                        <span>🔍</span> 套用過濾
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearFilters()">
+                        <span>🗑️</span> 清除過濾
+                    </button>
+                    <button type="button" class="btn btn-success" onclick="runAnalysis()">
+                        <span>📊</span> 執行分析
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Stats Section -->
+        <div class="stats-section">
+            <h3>📊 基本統計</h3>
+            <div class="stats-grid" id="basic-stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="totalRequests">{{ stats.get('total_requests', 0) }}</div>
+                    <div class="stat-label">總請求數</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="uniqueIPs">{{ stats.get('unique_ips', 0) }}</div>
+                    <div class="stat-label">唯一IP數</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="totalBytes">{{ "%.1f"|format(stats.get('total_bytes', 0)/1024/1024) }}</div>
+                    <div class="stat-label">總流量 (MB)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="avgResponseTime">{{ "%.0f"|format(stats.get('avg_response_size', 0)) }}</div>
+                    <div class="stat-label">平均回應 (bytes)</div>
+                </div>
+            </div>
+        </div>
+            
+        <!-- Info Cards Section -->
+        <div class="info-cards-grid">
+            <!-- Time Range -->
+            <div class="card" id="time-range">
+                <div class="card-header">
+                    <span class="card-icon">⏰</span>
+                    <span class="card-title">時間範圍</span>
+                </div>
+                <div id="timeRangeContent">
+                    <p>開始: <span id="startTimeDisplay">-</span></p>
+                    <p>結束: <span id="endTimeDisplay">-</span></p>
+                </div>
+            </div>
+            
+            <!-- Top URLs -->
+            <div class="card" id="top-urls">
+                <div class="card-header">
+                    <span class="card-icon">🔗</span>
+                    <span class="card-title">熱門URL</span>
+                </div>
+                <div id="topUrlsContent">
+                    <p>載入中...</p>
+                </div>
+            </div>
+            
+            <!-- Top IPs -->
+            <div class="card" id="top-ips">
+                <div class="card-header">
+                    <span class="card-icon">🌐</span>
+                    <span class="card-title">熱門IP</span>
+                </div>
+                <div id="topIpsContent">
+                    <p>載入中...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Log Viewer Section -->
+        <div class="log-viewer log-viewer-full">
+            <h3>📋 LOG查看器</h3>
+            <div class="log-controls">
+                <div class="log-search">
+                    <input type="text" id="logSearch" placeholder="搜尋關鍵字..." onkeyup="searchLogs()">
+                    <select id="pageSize" onchange="changePageSize()">
+                        <option value="10" selected>10筆/頁</option>
+                        <option value="25">25筆/頁</option>
+                        <option value="50">50筆/頁</option>
+                        <option value="100">100筆/頁</option>
+                    </select>
+                </div>
+            </div>
+            <table class="log-table" id="logTable">
+                <thead>
+                    <tr>
+                        <th>時間</th>
+                        <th>IP</th>
+                        <th>狀態碼</th>
+                        <th>方法</th>
+                        <th>URL</th>
+                        <th>大小</th>
+                        <th>User Agent</th>
+                    </tr>
+                </thead>
+                <tbody id="logTableBody">
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 20px;">載入中...</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="pagination" id="logPagination">
+                <!-- 分頁按鈕將由JavaScript動態生成 -->
+            </div>
+        </div>
+        
+        <!-- Charts Section -->
+        <div class="charts-grid">
+            <!-- Traffic Trend Chart -->
+            <div class="chart-container chart-full">
+                <h3>📈 流量趨勢</h3>
+                <div class="chart">
+                    <img id="trafficTrendChart" src="" alt="流量趨勢圖" style="display: none;">
+                </div>
+            </div>
+            
+            <!-- Top IPs Chart -->
+            <div class="chart-container chart-full">
+                <h3>🌐 熱門IP分布</h3>
+                <div class="chart">
+                    <img id="topIpsChart" src="" alt="熱門IP分布圖" style="display: none;">
+                </div>
+            </div>
+            
+            <!-- Top URLs Chart -->
+            <div class="chart-container chart-full">
+                <h3>🔗 熱門URL分布</h3>
+                <div class="chart">
+                    <img id="topUrlsChart" src="" alt="熱門URL分布圖" style="display: none;">
+                </div>
+            </div>
+        </div>
+        
+        <!-- API Section -->
+        <div class="api-section">
+            <h3>🔗 API端點</h3>
+            <div class="endpoint">
+                <span class="method">GET</span> /api/stats - 獲取統計資料
+            </div>
+            <div class="endpoint">
+                <span class="method">GET</span> /api/logs - 獲取LOG資料
+            </div>
+            <div class="endpoint">
+                <span class="method">GET</span> /api/analyze - 執行分析
+            </div>
+            <div class="endpoint">
+                <span class="method">GET</span> /api/chart/&lt;chart_type&gt; - 獲取圖表
+            </div>
+            <div class="endpoint">
+                <span class="method">GET</span> /health - 健康檢查
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/app.js') }}?v=3"></script>
+</body>
+</html>

@@ -6,6 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     libexpat1 \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # 複製requirements並安裝Python依賴
