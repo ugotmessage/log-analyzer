@@ -1,8 +1,8 @@
-pandas==2.1.4
+pandas==2.2.2
 plotly==5.17.0
 kaleido==0.2.1
 flask==3.0.0
 gunicorn==21.2.0
 python-dateutil==2.8.2
-numpy==1.24.3
+numpy==1.26.4
 pytz==2023.3

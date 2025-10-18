@@ -39,7 +39,14 @@ async function loadLogFiles() {
 // 載入統計資料
 async function loadStats() {
     try {
-        const response = await fetch('/api/stats');
+        // 依目前過濾條件組裝查詢參數
+        const form = document.getElementById('filterForm');
+        const formData = form ? new FormData(form) : new FormData();
+        const params = new URLSearchParams();
+        for (let [key, value] of formData.entries()) {
+            if (value) params.append(key, value);
+        }
+        const response = await fetch(`/api/stats?${params.toString()}`);
         const stats = await response.json();
         
         // 更新統計卡片
@@ -147,16 +154,17 @@ function updateLogTable() {
                     <td>${log.ip || '-'}</td>
                     <td><span class="status-code status-${Math.floor((log.status_code || 0) / 100) * 100}">${log.status_code || '-'}</span></td>
                     <td>${log.method || '-'}</td>
-                    <td title="${log.url || ''}">${truncateText(log.url || '', 50)}</td>
+                    <td title="${(log.url || log.upstream || log.host || log.server || '')}">${truncateText((log.url || log.upstream || log.host || log.server || ''), 50)}</td>
                     <td>${formatBytes(log.response_size || 0)}</td>
                     <td>${log.user_agent ? truncateText(log.user_agent, 30) : '-'}</td>
+                    <td>${log.message ? truncateText(log.message, 80) : '-'}</td>
                 </tr>
             `;
         } catch (error) {
             console.error('處理LOG記錄時出錯:', error, log);
             return `
                 <tr>
-                    <td colspan="7" style="color: red;">處理記錄時出錯: ${error.message}</td>
+                    <td colspan="8" style="color: red;">處理記錄時出錯: ${error.message}</td>
                 </tr>
             `;
         }

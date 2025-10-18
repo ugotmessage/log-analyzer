@@ -6,12 +6,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     libexpat1 \
+    curl \
     fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # 複製requirements並安裝Python依賴
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
 # 複製應用程式碼
 COPY . .

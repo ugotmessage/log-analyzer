@@ -44,6 +44,14 @@
                         </select>
                     </div>
                     <div class="filter-group">
+                        <label for="log_type">LOG類型</label>
+                        <select id="log_type" name="log_type">
+                            <option value="" selected>全部 (自動)</option>
+                            <option value="access">存取 (access)</option>
+                            <option value="error">錯誤 (error)</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
                         <label for="domain">網域過濾</label>
                         <input type="text" id="domain" name="domain" placeholder="例如: example.com">
                     </div>
@@ -124,7 +132,7 @@
         
         <!-- Log Viewer Section -->
         <div class="log-viewer log-viewer-full">
-            <h3>📋 LOG查看器</h3>
+            <h3>LOG查看器</h3>
             <div class="log-controls">
                 <div class="log-search">
                     <input type="text" id="logSearch" placeholder="搜尋關鍵字..." onkeyup="searchLogs()">
@@ -146,11 +154,12 @@
                         <th>URL</th>
                         <th>大小</th>
                         <th>User Agent</th>
+                        <th>錯誤原因</th>
                     </tr>
                 </thead>
                 <tbody id="logTableBody">
                     <tr>
-                        <td colspan="7" style="text-align: center; padding: 20px;">載入中...</td>
+                        <td colspan="8" style="text-align: center; padding: 20px;">載入中...</td>
                     </tr>
                 </tbody>
             </table>

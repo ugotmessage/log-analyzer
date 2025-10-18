@@ -17,28 +17,119 @@ class LogAnalyzer:
         self.log_dir = log_dir
         self.output_dir = output_dir
         self.log_pattern = r'(\S+) - - \[([^\]]+)\] "(\S+) ([^"]+) (\S+)" (\d+) (\d+) "([^"]*)" "([^"]*)"'
+        # Nginx 與 Apache error log（寬鬆匹配）
+        self.error_pattern_nginx = (
+            r'(?P<time>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] [^:]*: ?(?P<message>.*?)(?:, client: (?P<client>[^,]+))?(?:, server: (?P<server>[^,]+))?(?:, request: "(?P<request>[^\"]*)")?(?:, upstream: "(?P<upstream>[^\"]*)")?(?:, host: "(?P<host>[^\"]*)")?'
+        )
+        self.error_pattern_apache = (
+            r'\[(?P<time>[^\]]+)\] \[(?P<module>[^:]+):(?P<level>\w+)\] (?:\[pid (?P<pid>\d+):tid (?P<tid>\d+)\] )?(?:\[client (?P<client>[^\]]+)\] )?(?P<message>.*)'
+        )
         
         # 確保輸出目錄存在
         os.makedirs(output_dir, exist_ok=True)
         
     def parse_log_line(self, line: str) -> Dict[str, Any]:
-        """解析單行log"""
-        match = re.match(self.log_pattern, line.strip())
-        if not match:
-            return None
-            
-        groups = match.groups()
-        return {
-            'ip': groups[0],
-            'timestamp': groups[1],
-            'method': groups[2],
-            'url': groups[3],
-            'protocol': groups[4],
-            'status_code': int(groups[5]),
-            'response_size': int(groups[6]),
-            'referer': groups[7],
-            'user_agent': groups[8]
-        }
+        """解析單行log：先嘗試 access，再嘗試 error（nginx/apache）"""
+        text = line.strip()
+        # 1) Access log
+        match = re.match(self.log_pattern, text)
+        if match:
+            groups = match.groups()
+            return {
+                'log_type': 'access',
+                'ip': groups[0],
+                'timestamp': groups[1],
+                'method': groups[2],
+                'url': groups[3],
+                'protocol': groups[4],
+                'status_code': int(groups[5]),
+                'response_size': int(groups[6]),
+                'referer': groups[7],
+                'user_agent': groups[8]
+            }
+
+        # 2) Nginx error log
+        m_ng = re.match(self.error_pattern_nginx, text)
+        if m_ng:
+            gd = m_ng.groupdict()
+            method = None
+            url = None
+            req = gd.get('request')
+            if not req:
+                m_req = re.search(r'request: "([^"]+)"', text)
+                if m_req:
+                    req = m_req.group(1)
+            if req:
+                parts = req.split()
+                if len(parts) >= 2:
+                    method = parts[0]
+                    url = parts[1]
+            # 訊息：從冒號後到第一個已知欄位（client/server/request/upstream/host）之前
+            msg = (gd.get('message') or '').strip()
+            if not msg:
+                m2 = re.search(r":\s(?P<msg>.+?)(?:,\s(?:client|server|request|upstream|host):|$)", text)
+                if m2:
+                    msg = (m2.group('msg') or '').strip()
+            if not msg:
+                msg = text
+            # 解析 client IP（正則群組缺時用全文擷取）
+            client_ip_raw = (gd.get('client') or '')
+            if not client_ip_raw:
+                m_client = re.search(r", client: ([^,]+)", text)
+                if m_client:
+                    client_ip_raw = m_client.group(1)
+
+            return {
+                'log_type': 'error',
+                'timestamp': gd.get('time'),
+                'ip': (client_ip_raw or '').split(':')[0],
+                'method': method,
+                'url': url or gd.get('upstream') or gd.get('host') or gd.get('server'),
+                'protocol': None,
+                'status_code': None,
+                'response_size': None,
+                'referer': None,
+                'user_agent': None,
+                'level': gd.get('level'),
+                'message': msg
+            }
+
+        # 3) Apache error log
+        m_ap = re.match(self.error_pattern_apache, text)
+        if m_ap:
+            gd = m_ap.groupdict()
+            method = None
+            url = None
+            msg = gd.get('message') or ''
+            req_m = re.search(r'"(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) ([^\s\"]+)[^\"]*"', msg)
+            if req_m:
+                method = req_m.group(1)
+                url = req_m.group(2)
+            if not msg:
+                m2 = re.search(r"\] (?P<msg>.+)$", text)
+                if m2:
+                    msg = (m2.group('msg') or '').strip()
+            if not msg:
+                msg = text
+            client = gd.get('client')
+            client_ip = client.split(':')[0] if client else None
+            return {
+                'log_type': 'error',
+                'timestamp': gd.get('time'),
+                'ip': client_ip,
+                'method': method,
+                'url': url,
+                'protocol': None,
+                'status_code': None,
+                'response_size': None,
+                'referer': None,
+                'user_agent': None,
+                'level': gd.get('level'),
+                'message': msg
+            }
+
+        # 4) 其他未知格式
+        return None
     
     def load_logs(self, filename: str = None, start_time: str = None, end_time: str = None, domain: str = None) -> List[Dict[str, Any]]:
         """載入並解析log檔案，支援時間範圍和網域過濾"""
@@ -58,9 +149,9 @@ class LogAnalyzer:
                         if parsed:
                             logs.append(parsed)
         else:
-            # 載入所有log檔案
+            # 載入所有log檔案（同時包含 access 與常見 error 副檔名）
             for file in os.listdir(self.log_dir):
-                if file.endswith('.log'):
+                if file.endswith('.log') or file.endswith('.error.log') or file.endswith('.err') or file.endswith('.error'):
                     file_path = os.path.join(self.log_dir, file)
                     with open(file_path, 'r', encoding='utf-8') as f:
                         for line in f:
@@ -92,8 +183,20 @@ class LogAnalyzer:
         
         for log in logs:
             try:
-                # 解析時間戳記
-                log_time = pd.to_datetime(log['timestamp'], format='%d/%b/%Y:%H:%M:%S %z')
+                # 解析時間戳記（同時支援 access 與 nginx error 常見格式）
+                ts = log.get('timestamp')
+                log_time = None
+                for fmt in ('%d/%b/%Y:%H:%M:%S %z', '%Y/%m/%d %H:%M:%S', '%a %b %d %H:%M:%S.%f %Y'):
+                    try:
+                        log_time = pd.to_datetime(ts, format=fmt)
+                        break
+                    except Exception:
+                        continue
+                if log_time is None:
+                    # 最後嘗試自動解析
+                    log_time = pd.to_datetime(ts, errors='coerce')
+                if pd.isna(log_time):
+                    continue
                 
                 # 檢查時間範圍
                 if start_time:
@@ -118,8 +221,10 @@ class LogAnalyzer:
         filtered_logs = []
         
         for log in logs:
-            # 檢查URL是否包含指定網域
-            if domain.lower() in log['url'].lower() or domain.lower() in log['referer'].lower():
+            # 檢查URL/Referer 是否包含指定網域
+            url = str(log.get('url', '')).lower()
+            ref = str(log.get('referer', '')).lower()
+            if domain.lower() in url or domain.lower() in ref:
                 filtered_logs.append(log)
         
         return filtered_logs
@@ -132,9 +237,28 @@ class LogAnalyzer:
             
         df = pd.DataFrame(logs)
         
-        # 轉換時間戳記
-        df['datetime'] = pd.to_datetime(df['timestamp'], format='%d/%b/%Y:%H:%M:%S %z')
+        # 轉換時間戳記（統一為無時區 datetime64[ns]）
+        df['datetime'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
+        mask_na = df['datetime'].isna()
+        if mask_na.any():
+            df.loc[mask_na, 'datetime'] = pd.to_datetime(df.loc[mask_na, 'timestamp'], format='%d/%b/%Y:%H:%M:%S %z', errors='coerce', utc=True)
+        mask_na = df['datetime'].isna()
+        if mask_na.any():
+            df.loc[mask_na, 'datetime'] = pd.to_datetime(df.loc[mask_na, 'timestamp'], format='%Y/%m/%d %H:%M:%S', errors='coerce')
+        # 去除時區並強制為 datetime64[ns]
+        try:
+            df['datetime'] = df['datetime'].dt.tz_convert(None)
+        except Exception:
+            try:
+                df['datetime'] = df['datetime'].dt.tz_localize(None)
+            except Exception:
+                pass
+        df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
         
+        # 數值欄位清洗，避免 NaN 造成 int 轉換錯誤
+        df['response_size'] = pd.to_numeric(df.get('response_size', 0), errors='coerce').fillna(0).astype('int64')
+        df['status_code'] = pd.to_numeric(df.get('status_code', 0), errors='coerce').fillna(0).astype('int64')
+
         # 產出熱門IP/URL為陣列以相容前端 slice/map
         top_ips_counts = df['ip'].value_counts().head(10)
         top_ips_list = [{ 'ip': str(ip), 'count': int(cnt) } for ip, cnt in top_ips_counts.items()]
@@ -165,14 +289,32 @@ class LogAnalyzer:
             
         df = pd.DataFrame(logs)
         
-        # 轉換時間戳記
-        df['datetime'] = pd.to_datetime(df['timestamp'], format='%d/%b/%Y:%H:%M:%S %z')
+        # 轉換時間戳記（統一為無時區 datetime64[ns]）
+        df['datetime'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
+        mask_na = df['datetime'].isna()
+        if mask_na.any():
+            df.loc[mask_na, 'datetime'] = pd.to_datetime(df.loc[mask_na, 'timestamp'], format='%d/%b/%Y:%H:%M:%S %z', errors='coerce', utc=True)
+        mask_na = df['datetime'].isna()
+        if mask_na.any():
+            df.loc[mask_na, 'datetime'] = pd.to_datetime(df.loc[mask_na, 'timestamp'], format='%Y/%m/%d %H:%M:%S', errors='coerce')
+        try:
+            df['datetime'] = df['datetime'].dt.tz_convert(None)
+        except Exception:
+            try:
+                df['datetime'] = df['datetime'].dt.tz_localize(None)
+            except Exception:
+                pass
+        df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
         
+        # 數值欄位清洗
+        df['response_size'] = pd.to_numeric(df.get('response_size', 0), errors='coerce').fillna(0).astype('int64')
+        df['status_code'] = pd.to_numeric(df.get('status_code', 0), errors='coerce').fillna(0).astype('int64')
+
         top_ips_counts = df['ip'].value_counts().head(10)
         top_ips_list = [{ 'ip': str(ip), 'count': int(cnt) } for ip, cnt in top_ips_counts.items()]
         top_urls_counts = df['url'].value_counts().head(10)
         top_urls_list = [{ 'url': str(url), 'count': int(cnt) } for url, cnt in top_urls_counts.items()]
-
+        
         stats = {
             'total_requests': int(len(logs)),
             'unique_ips': int(df['ip'].nunique()),
@@ -197,7 +339,23 @@ class LogAnalyzer:
             return {}
             
         df = pd.DataFrame(logs)
-        df['datetime'] = pd.to_datetime(df['timestamp'], format='%d/%b/%Y:%H:%M:%S %z')
+        df['datetime'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
+        mask_na = df['datetime'].isna()
+        if mask_na.any():
+            df.loc[mask_na, 'datetime'] = pd.to_datetime(df.loc[mask_na, 'timestamp'], format='%d/%b/%Y:%H:%M:%S %z', errors='coerce', utc=True)
+        mask_na = df['datetime'].isna()
+        if mask_na.any():
+            df.loc[mask_na, 'datetime'] = pd.to_datetime(df.loc[mask_na, 'timestamp'], format='%Y/%m/%d %H:%M:%S', errors='coerce')
+        try:
+            df['datetime'] = df['datetime'].dt.tz_convert(None)
+        except Exception:
+            try:
+                df['datetime'] = df['datetime'].dt.tz_localize(None)
+            except Exception:
+                pass
+        df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
+        # 移除無法解析的列，避免 .dt 錯誤
+        df = df.dropna(subset=['datetime'])
         df['hour'] = df['datetime'].dt.hour
         
         hourly_stats = df.groupby('hour').agg({
@@ -221,7 +379,22 @@ class LogAnalyzer:
             return {}
             
         df = pd.DataFrame(logs)
-        df['datetime'] = pd.to_datetime(df['timestamp'], format='%d/%b/%Y:%H:%M:%S %z')
+        df['datetime'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
+        mask_na = df['datetime'].isna()
+        if mask_na.any():
+            df.loc[mask_na, 'datetime'] = pd.to_datetime(df.loc[mask_na, 'timestamp'], format='%d/%b/%Y:%H:%M:%S %z', errors='coerce', utc=True)
+        mask_na = df['datetime'].isna()
+        if mask_na.any():
+            df.loc[mask_na, 'datetime'] = pd.to_datetime(df.loc[mask_na, 'timestamp'], format='%Y/%m/%d %H:%M:%S', errors='coerce')
+        try:
+            df['datetime'] = df['datetime'].dt.tz_convert(None)
+        except Exception:
+            try:
+                df['datetime'] = df['datetime'].dt.tz_localize(None)
+            except Exception:
+                pass
+        df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
+        df = df.dropna(subset=['datetime'])
         df['hour'] = df['datetime'].dt.hour
         
         hourly_stats = df.groupby('hour').agg({
@@ -286,19 +459,26 @@ class LogAnalyzer:
         return anomalies
     
     def get_logs(self, filename: str = None, start_time: str = None, end_time: str = None, 
-                 domain: str = None, search: str = None, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+                 domain: str = None, search: str = None, page: int = 1, page_size: int = 10, log_type: str = None) -> Dict[str, Any]:
         """取得LOG資料，支援分頁和搜尋"""
         logs = self.load_logs(filename, start_time, end_time, domain)
         
+        # 依 log_type 過濾（'access' 或 'error'）
+        if log_type in ('access', 'error', 'raw'):
+            logs = [l for l in logs if l.get('log_type') == log_type]
+        
         # 應用搜尋過濾
         if search:
-            search_lower = search.lower()
+            search_lower = str(search).lower()
+            def s(val):
+                return str(val or '').lower()
             logs = [log for log in logs if 
-                   search_lower in log.get('ip', '').lower() or
-                   search_lower in log.get('url', '').lower() or
-                   search_lower in log.get('method', '').lower() or
-                   search_lower in str(log.get('status_code', '')).lower() or
-                   search_lower in log.get('user_agent', '').lower()]
+                   search_lower in s(log.get('ip')) or
+                   search_lower in s(log.get('url')) or
+                   search_lower in s(log.get('method')) or
+                   search_lower in s(log.get('status_code')) or
+                   search_lower in s(log.get('user_agent')) or
+                   search_lower in s(log.get('message'))]
         
         # 計算分頁
         total = len(logs)
@@ -349,7 +529,23 @@ class LogAnalyzer:
             return []
             
         df = pd.DataFrame(logs)
-        df['datetime'] = pd.to_datetime(df['timestamp'], format='%d/%b/%Y:%H:%M:%S %z')
+        # 圖表也改為寬鬆解析（先自動，其次 access，再 nginx error）
+        df['datetime'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
+        mask_na = df['datetime'].isna()
+        if mask_na.any():
+            df.loc[mask_na, 'datetime'] = pd.to_datetime(df.loc[mask_na, 'timestamp'], format='%d/%b/%Y:%H:%M:%S %z', errors='coerce', utc=True)
+        mask_na = df['datetime'].isna()
+        if mask_na.any():
+            df.loc[mask_na, 'datetime'] = pd.to_datetime(df.loc[mask_na, 'timestamp'], format='%Y/%m/%d %H:%M:%S', errors='coerce')
+        try:
+            df['datetime'] = df['datetime'].dt.tz_convert(None)
+        except Exception:
+            try:
+                df['datetime'] = df['datetime'].dt.tz_localize(None)
+            except Exception:
+                pass
+        df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
+        df = df.dropna(subset=['datetime'])
         
         chart_files = []
         

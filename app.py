@@ -138,7 +138,7 @@ def list_log_files():
         log_files = []
         if os.path.exists(analyzer.log_dir):
             for file in os.listdir(analyzer.log_dir):
-                if file.endswith('.log'):
+                if file.endswith('.log') or file.endswith('.error.log') or file.endswith('.err') or file.endswith('.error'):
                     file_path = os.path.join(analyzer.log_dir, file)
                     file_size = os.path.getsize(file_path)
                     log_files.append({
@@ -170,7 +170,8 @@ def get_logs():
             domain=domain,
             search=search,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            log_type=request.args.get('log_type')
         )
         
         return jsonify({

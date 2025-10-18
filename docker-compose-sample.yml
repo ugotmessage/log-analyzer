@@ -1,21 +1,27 @@
-
 services:
   log-analyzer:
     build: .
     ports:
       - "5566:5000"
     volumes:
-      # 掛載log資料夾到容器內
+      # 範例：開發環境直接掛載整個專案目錄
+      - ./:/app
+      # 日誌為唯讀掛載
       - ./logs:/app/logs:ro
-      # 掛載輸出結果資料夾
+      # 輸出持久化
       - ./output:/app/output
+      
     environment:
-      - FLASK_ENV=production
+      - FLASK_ENV=development
       - LOG_DIR=/app/logs
       - OUTPUT_DIR=/app/output
+      
     restart: unless-stopped
+    # 開發：使用 Flask reloader
+    command: ["flask", "run", "--host=0.0.0.0", "--port=5000", "--debug"]
+    
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5566/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

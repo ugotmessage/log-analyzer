@@ -1,22 +1,29 @@
-
-
 services:
   log-analyzer:
     build: .
     ports:
       - "5566:5000"
     volumes:
-      # 掛載log資料夾到容器內
+      # 直接掛載整個專案目錄，開發時免重建即可同步程式碼
+      - ./:/app
+      # 明確指定 logs 為唯讀，避免意外覆寫
       - ./logs:/app/logs:ro
-      # 掛載輸出結果資料夾
+      # 輸出資料夾持久化
       - ./output:/app/output
+      
     environment:
-      - FLASK_ENV=production
+      - FLASK_ENV=development  # 開發模式，啟用除錯與熱重載
       - LOG_DIR=/app/logs
       - OUTPUT_DIR=/app/output
+      
     restart: unless-stopped
+    
+    # 覆寫 Dockerfile 的啟動命令，開發使用 Flask reloader
+    command: ["flask", "run", "--host=0.0.0.0", "--port=5000", "--debug"]
+    
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5566/health"]
+      # 健康檢查在容器內部執行，檢查 5000 端口
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
