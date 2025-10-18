@@ -43,9 +43,31 @@ async function loadStats() {
         const form = document.getElementById('filterForm');
         const formData = form ? new FormData(form) : new FormData();
         const params = new URLSearchParams();
+        const selectedFile = formData.get('filename');
         for (let [key, value] of formData.entries()) {
             if (value) params.append(key, value);
         }
+        // 若未選擇檔案：不呼叫後端，直接顯示引導訊息
+        if (!selectedFile) {
+            const totalRequestsEl = document.getElementById('totalRequests');
+            const uniqueIPsEl = document.getElementById('uniqueIPs');
+            const totalBytesEl = document.getElementById('totalBytes');
+            const avgResponseTimeEl = document.getElementById('avgResponseTime');
+            if (totalRequestsEl) totalRequestsEl.textContent = '-';
+            if (uniqueIPsEl) uniqueIPsEl.textContent = '-';
+            if (totalBytesEl) totalBytesEl.textContent = '-';
+            if (avgResponseTimeEl) avgResponseTimeEl.textContent = '-';
+            const topUrlsContent = document.getElementById('topUrlsContent');
+            const topIpsContent = document.getElementById('topIpsContent');
+            if (topUrlsContent) topUrlsContent.innerHTML = '<p>請先選擇 LOG 檔案後再分析</p>';
+            if (topIpsContent) topIpsContent.innerHTML = '<p>請先選擇 LOG 檔案後再分析</p>';
+            const startEl = document.getElementById('startTimeDisplay');
+            const endEl = document.getElementById('endTimeDisplay');
+            if (startEl) startEl.textContent = '-';
+            if (endEl) endEl.textContent = '-';
+            return;
+        }
+
         const response = await fetch(`/api/stats?${params.toString()}`);
         const stats = await response.json();
         
