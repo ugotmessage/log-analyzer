@@ -5,6 +5,7 @@ let currentPage = 1;
 let pageSize = 10;
 let searchKeyword = '';
 let timeInterval = 'daily';
+let currentLogTab = 'access';
 
 // 頁面載入時初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -24,15 +25,45 @@ async function loadLogFiles() {
         const select = document.getElementById('filename');
         select.innerHTML = '<option value="">所有檔案</option>';
         if (data.log_files && Array.isArray(data.log_files)) {
-            data.log_files.forEach(file => {
-                const option = document.createElement('option');
-                option.value = file.filename;
-                option.textContent = `${file.filename} (${(file.size / 1024).toFixed(1)}KB)`;
-                select.appendChild(option);
-            });
+            // 暫存於 data-* 供過濾使用
+            select.dataset.allFiles = JSON.stringify(data.log_files);
+            renderFileOptions(data.log_files);
         }
     } catch (error) {
         console.error('載入LOG檔案失敗:', error);
+    }
+}
+
+function renderFileOptions(files) {
+    const select = document.getElementById('filename');
+    const current = select.value;
+    select.innerHTML = '<option value="">所有檔案</option>';
+    files.forEach(file => {
+        const option = document.createElement('option');
+        option.value = file.filename;
+        option.textContent = `${file.filename} (${(file.size / 1024).toFixed(1)}KB)`;
+        option.dataset.type = file.type || 'access';
+        select.appendChild(option);
+    });
+    // 保持原選擇（若仍存在）
+    const exists = Array.from(select.options).some(o => o.value === current);
+    if (exists) select.value = current;
+}
+
+function filterFileOptions() {
+    try {
+        const select = document.getElementById('filename');
+        const allFiles = JSON.parse(select.dataset.allFiles || '[]');
+        const keyword = (document.getElementById('fileSearch')?.value || '').toLowerCase();
+        const typeFilter = document.querySelector('input[name="fileTypeFilter"]:checked')?.value || 'all';
+        const filtered = allFiles.filter(f => {
+            const nameOk = f.filename.toLowerCase().includes(keyword);
+            const typeOk = typeFilter === 'all' ? true : (f.type === typeFilter);
+            return nameOk && typeOk;
+        });
+        renderFileOptions(filtered);
+    } catch (e) {
+        console.error('過濾檔案清單失敗:', e);
     }
 }
 
@@ -127,6 +158,12 @@ async function loadLogs() {
             if (value) {
                 params.append(key, value);
             }
+        }
+        // 依分頁類型加入 log_type 過濾
+        if (currentLogTab === 'error') {
+            params.append('log_type', 'error');
+        } else if (currentLogTab === 'access') {
+            params.append('log_type', 'access');
         }
         
         // 添加分頁參數
@@ -353,6 +390,29 @@ function updateCharts() {
 function updateTimeInterval() {
     timeInterval = document.getElementById('time_interval').value;
     updateCharts();
+}
+
+// 切換 LOG 分頁（access/error），並重新載入
+function switchLogTab(tab) {
+    currentLogTab = tab;
+    // 視覺狀態
+    const ta = document.getElementById('tab-access');
+    const te = document.getElementById('tab-error');
+    if (ta && te) {
+        if (tab === 'access') {
+            ta.classList.add('btn-primary');
+            ta.classList.remove('btn-secondary');
+            te.classList.add('btn-secondary');
+            te.classList.remove('btn-primary');
+        } else {
+            te.classList.add('btn-primary');
+            te.classList.remove('btn-secondary');
+            ta.classList.add('btn-secondary');
+            ta.classList.remove('btn-primary');
+        }
+    }
+    currentPage = 1;
+    loadLogs();
 }
 
 // 監聽視窗大小變化，並自動調整所有圖表尺寸

@@ -22,9 +22,21 @@
                 <div class="filter-grid">
                     <div class="filter-group">
                         <label for="filename">LOG檔案</label>
+                        <input type="text" id="fileSearch" placeholder="搜尋檔名..." onkeyup="filterFileOptions()" style="margin-bottom:6px;">
                         <select id="filename" name="filename">
                             <option value="">所有檔案</option>
                         </select>
+                        <div style="margin-top:6px;">
+                            <label style="margin-right:8px;">
+                                <input type="radio" name="fileTypeFilter" value="all" checked onchange="filterFileOptions()"> 全部
+                            </label>
+                            <label style="margin-right:8px;">
+                                <input type="radio" name="fileTypeFilter" value="access" onchange="filterFileOptions()"> 一般
+                            </label>
+                            <label>
+                                <input type="radio" name="fileTypeFilter" value="error" onchange="filterFileOptions()"> 錯誤
+                            </label>
+                        </div>
                     </div>
                     <div class="filter-group">
                         <label for="start_time">開始時間</label>
@@ -134,6 +146,10 @@
         <div class="log-viewer log-viewer-full">
             <h3>LOG查看器</h3>
             <div class="log-controls">
+                <div class="log-tabs" style="margin-bottom: 10px;">
+                    <button id="tab-access" class="btn btn-primary" type="button" onclick="switchLogTab('access')">一般 (Access)</button>
+                    <button id="tab-error" class="btn btn-secondary" type="button" onclick="switchLogTab('error')" style="margin-left: 8px;">錯誤 (Error)</button>
+                </div>
                 <div class="log-search">
                     <input type="text" id="logSearch" placeholder="搜尋關鍵字..." onkeyup="searchLogs()">
                     <select id="pageSize" onchange="changePageSize()">

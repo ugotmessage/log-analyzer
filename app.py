@@ -141,9 +141,13 @@ def list_log_files():
                 if file.endswith('.log') or file.endswith('.error.log') or file.endswith('.err') or file.endswith('.error'):
                     file_path = os.path.join(analyzer.log_dir, file)
                     file_size = os.path.getsize(file_path)
+                    # 依副檔名粗略判斷類型
+                    f_lower = file.lower()
+                    ftype = 'error' if (f_lower.endswith('.error.log') or f_lower.endswith('.err') or f_lower.endswith('.error')) else 'access'
                     log_files.append({
                         'filename': file,
-                        'size': file_size
+                        'size': file_size,
+                        'type': ftype
                     })
         return jsonify({'log_files': log_files})
     except Exception as e:
