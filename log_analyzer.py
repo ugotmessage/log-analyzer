@@ -28,6 +28,30 @@ class LogAnalyzer:
         # 確保輸出目錄存在
         os.makedirs(output_dir, exist_ok=True)
         
+    def _read_lines(self, file_path: str):
+        """以多種編碼容錯讀檔，逐行回傳字串。"""
+        encodings = ['utf-8', 'cp950', 'big5', 'latin-1']
+        for enc in encodings:
+            try:
+                with open(file_path, 'r', encoding=enc, errors='strict') as f:
+                    for line in f:
+                        yield line
+                return
+            except UnicodeDecodeError:
+                continue
+            except Exception:
+                break
+        # 最後退路：以二進位讀入並忽略不可解碼字元
+        try:
+            with open(file_path, 'rb') as f:
+                for raw in f:
+                    try:
+                        yield raw.decode('utf-8', errors='ignore')
+                    except Exception:
+                        yield raw.decode('latin-1', errors='ignore')
+        except Exception:
+            return
+
     def parse_log_line(self, line: str) -> Dict[str, Any]:
         """解析單行log：先嘗試 access，再嘗試 error（nginx/apache）"""
         text = line.strip()
@@ -143,21 +167,19 @@ class LogAnalyzer:
                     break
             file_path = os.path.join(self.log_dir, filename)
             if os.path.exists(file_path):
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        parsed = self.parse_log_line(line)
-                        if parsed:
-                            logs.append(parsed)
+                for line in self._read_lines(file_path):
+                    parsed = self.parse_log_line(line)
+                    if parsed:
+                        logs.append(parsed)
         else:
             # 載入所有log檔案（同時包含 access 與常見 error 副檔名）
             for file in os.listdir(self.log_dir):
                 if file.endswith('.log') or file.endswith('.error.log') or file.endswith('.err') or file.endswith('.error'):
                     file_path = os.path.join(self.log_dir, file)
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        for line in f:
-                            parsed = self.parse_log_line(line)
-                            if parsed:
-                                logs.append(parsed)
+                    for line in self._read_lines(file_path):
+                        parsed = self.parse_log_line(line)
+                        if parsed:
+                            logs.append(parsed)
         
         # 應用過濾條件
         filtered_logs = self._apply_filters(logs, start_time, end_time, domain)
